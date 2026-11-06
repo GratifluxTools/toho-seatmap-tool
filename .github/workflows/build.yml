@@ -32,6 +32,8 @@ jobs:
         run: pyinstaller --noconfirm --onefile --console --name toho-seatmap-cli --collect-data toho_seatmap run_cli.py
       - name: Smoke test
         shell: pwsh
+        env:
+          PYTHONUTF8: "1"
         run: |
           ./dist/toho-seatmap-cli.exe tests/sample/sample.har -o smoke
           if (-not (Test-Path smoke/sample.png)) { throw "PNG not generated" }
