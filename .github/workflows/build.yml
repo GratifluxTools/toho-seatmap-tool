@@ -1,0 +1,100 @@
+name: Build
+
+# 手動実行専用。Actions タブ > Build > Run workflow で対象OSを選びます。
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: ビルド対象
+        type: choice
+        options: [windows, linux, both]
+        default: both
+
+jobs:
+  windows:
+    if: ${{ inputs.target == 'windows' || inputs.target == 'both' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Build GUI (exe)
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name toho-seatmap-gui --hidden-import PIL._tkinter_finder
+          --add-data "toho_seatmap/assets;toho_seatmap/assets" run_gui.py
+      - name: Build CLI (exe)
+        run: >
+          pyinstaller --noconfirm --onefile --console --name toho-seatmap-cli
+          --add-data "toho_seatmap/assets;toho_seatmap/assets" run_cli.py
+      - name: Smoke test
+        shell: pwsh
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          ./dist/toho-seatmap-cli.exe tests/sample/sample.har -o smoke
+          if (-not (Test-Path smoke/sample.png)) { throw "PNG not generated" }
+          # 同梱アセット(座席gif・画面の背景/CSS)がexeの中から読めること
+          $info = ./dist/toho-seatmap-cli.exe --self-check | Out-String
+          Write-Host $info
+          if ($info -notmatch 'embedded_seat_gifs=(1[0-9]|[2-9][0-9])') { throw "seat gifs not available" }
+          if ((Test-Path toho_seatmap/assets/screens) -and ($info -notmatch 'bundled_screen_files=[1-9]')) { throw "bundled screen assets missing from exe" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toho-seatmap-windows-x64
+          path: |
+            dist/toho-seatmap-gui.exe
+            dist/toho-seatmap-cli.exe
+
+  linux:
+    if: ${{ inputs.target == 'linux' || inputs.target == 'both' }}
+    # 古めのglibcでビルドすると新旧ディストリで動かしやすい
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: System packages (tkinter, Japanese font)
+        run: sudo apt-get update && sudo apt-get install -y python3-tk tk fonts-noto-cjk
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - name: Bundle Japanese font (OFL)
+        # 利用者のLinuxに日本語フォントが無くてもPNGが日本語になるよう同梱する
+        run: |
+          mkdir -p toho_seatmap/fonts
+          cp "$(fc-list :lang=ja file | grep -i 'NotoSansCJK.*Regular' | head -n1 | cut -d: -f1)" toho_seatmap/fonts/ || echo "font bundle skipped"
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Build GUI
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name toho-seatmap-gui --hidden-import PIL._tkinter_finder
+          --add-data "toho_seatmap/assets:toho_seatmap/assets"
+          --add-data "toho_seatmap/fonts:toho_seatmap/fonts" run_gui.py
+      - name: Build CLI
+        run: >
+          pyinstaller --noconfirm --onefile --console
+          --name toho-seatmap-cli
+          --add-data "toho_seatmap/assets:toho_seatmap/assets"
+          --add-data "toho_seatmap/fonts:toho_seatmap/fonts" run_cli.py
+      - name: Smoke test
+        run: |
+          ./dist/toho-seatmap-cli tests/sample/sample.har -o smoke
+          test -s smoke/sample.png
+          # 同梱アセット(座席gif・画面の背景/CSS)がバイナリの中から読めること
+          info="$(./dist/toho-seatmap-cli --self-check)"
+          echo "$info"
+          echo "$info" | grep -E 'embedded_seat_gifs=(1[0-9]|[2-9][0-9])'
+          if [ -d toho_seatmap/assets/screens ]; then echo "$info" | grep -E 'bundled_screen_files=[1-9]'; fi
+      - name: Package (keep executable bit)
+        run: tar -C dist -czf toho-seatmap-linux-x64.tar.gz toho-seatmap-gui toho-seatmap-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toho-seatmap-linux-x64
+          path: toho-seatmap-linux-x64.tar.gz

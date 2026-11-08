@@ -1,0 +1,9 @@
+__pycache__/
+build/
+dist/
+*.spec
+smoke/
+seatmaps/
+*.har
+!tests/sample/sample.har
+toho_seatmap/fonts/
