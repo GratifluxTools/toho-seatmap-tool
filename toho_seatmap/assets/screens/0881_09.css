@@ -1,0 +1,115 @@
+/*TABLE*/
+.ticket-fix-table, .screen-fix-table {
+	width: 100%;
+}
+.ticket-fix-table p, .screen-fix-table p {
+	line-height: 110%;
+	margin: 0;
+	padding: 0;
+}
+.ticket-fix-table td, .ticket-fix-table th {
+}
+.ticket-fix-table th.left-bord {
+	width: 60px;
+}
+.screen-fix-table th.left-bord {
+	width: 100px;
+}
+.ticket-fix-table td.mid-bord {
+	width: 30%;
+}
+div#wheel-frame {
+	width: 38px;
+	height: 19px;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+.screen-table  {
+	padding: 0;
+	margin: 0;
+}
+.screen-table .wheel-td {
+	padding-bottom: 0;
+}
+ol.wheel-table {
+	padding: 0;
+	margin: 0;
+	height: 19px;
+}
+ol.wheel-table li {
+	float: left;
+	clear: right;
+	height: 19px;
+	margin: 0;
+	padding: 0;
+	list-style-type: none;
+}
+img.left {
+	float: left;
+	clear: right;
+	margin: 0;
+}
+.screen-table td {
+	margin: 0;
+	border: 0;
+	background: none;
+	padding-top: 0;
+	padding-right: 0;
+	padding-bottom: 7px;
+	padding-left: 0;
+}
+.screen-table td img {
+	border: 0;
+}
+
+.mini-table td { margin: 0; padding: 0 9px 0 0; }
+
+TD.paddingLeft1 { padding-left: 1px; }
+
+/* 20081001 */
+.screen-table td.paddingLeft1 {
+	padding-left: 7px;
+	padding-bottom: 0;
+}
+.screen-table td.paddingLeft2 {
+	padding-left: 0px;
+	padding-bottom: 0;
+}
+
+
+/*���j�[�N�ݒ�*/
+
+#screen-defimg {
+	width: 325px;
+	height:557px;
+	padding: 0;
+	background-image:  url(screen.gif);
+	background-repeat: no-repeat;
+	background-position: left top;
+}
+#screen-list-frame {
+	display: block;
+	margin: 0;
+	padding-top: 157px;
+	padding-left: 13px;
+}
+/*
+*:first-child+html #screen-list-frame {
+	padding-top: 50px;
+}
+*/
+#screen-list-frame-inner {
+	display: block;
+	width: 215px;
+	margin: 0;
+	padding: 0;
+}
+#screen-table-1 {
+	padding: 0;
+	margin: 0;
+}
+#screen-table-1-d-l {
+	padding: 0;
+	margin: 24px 0 0 0;
+}
