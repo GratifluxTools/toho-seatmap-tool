@@ -1,0 +1,104 @@
+name: Release
+
+# 手動実行専用。成功済みの Build の成果物を GitHub Release に添付します(ビルドはやり直しません)。
+# Actions タブ > Release > Run workflow で、タグ名(例 v0.1.0)を入力して実行します。
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "リリースのタグ名 (例: v0.1.0)。存在しなければ作成、存在すれば添付ファイルを上書き"
+        required: true
+        type: string
+      run_id:
+        description: "使う Build の実行ID。空欄なら最新の成功した Build"
+        required: false
+        type: string
+      notes:
+        description: "リリースノート (空欄なら自動生成)"
+        required: false
+        type: string
+      prerelease:
+        description: "プレリリースとして公開"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # Release の作成・ファイル添付
+  actions: read     # Build の成果物(artifact)のダウンロード
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag }}
+      INPUT_RUN_ID: ${{ inputs.run_id }}
+      INPUT_NOTES: ${{ inputs.notes }}
+      PRERELEASE: ${{ inputs.prerelease }}
+    steps:
+      - name: Resolve Build run
+        id: run
+        run: |
+          if [ -z "$TAG" ] || [[ "$TAG" =~ [[:space:]] ]]; then
+            echo "::error::tag に空白は使えません (例: v0.1.0)"; exit 1
+          fi
+          RUN_ID="$INPUT_RUN_ID"
+          if [ -z "$RUN_ID" ]; then
+            RUN_ID=$(gh run list --workflow build.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          fi
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::error::成功した Build が見つかりません。先に Build を実行してください"; exit 1
+          fi
+          CONCLUSION=$(gh run view "$RUN_ID" --json conclusion --jq .conclusion)
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "::error::Build #$RUN_ID は成功していません (conclusion=$CONCLUSION)"; exit 1
+          fi
+          SHA=$(gh run view "$RUN_ID" --json headSha --jq .headSha)
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Build run: $RUN_ID (commit $SHA)"
+
+      - name: Download artifacts
+        run: |
+          mkdir -p artifacts
+          gh run download "${{ steps.run.outputs.run_id }}" -n toho-seatmap-windows-x64 -D artifacts/windows || echo "windows artifact: なし"
+          gh run download "${{ steps.run.outputs.run_id }}" -n toho-seatmap-linux-x64 -D artifacts/linux || echo "linux artifact: なし"
+          find artifacts -type f | sort
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p assets
+          if ls artifacts/windows/*.exe >/dev/null 2>&1; then
+            (cd artifacts/windows && zip -j "$GITHUB_WORKSPACE/assets/toho-seatmap-${TAG}-windows-x64.zip" *.exe)
+          fi
+          if [ -f artifacts/linux/toho-seatmap-linux-x64.tar.gz ]; then
+            cp artifacts/linux/toho-seatmap-linux-x64.tar.gz "assets/toho-seatmap-${TAG}-linux-x64.tar.gz"
+          fi
+          if [ -z "$(ls -A assets)" ]; then
+            echo "::error::この Build には添付できる成果物がありません (windows / linux のどちらも無し)"; exit 1
+          fi
+          ls -lh assets
+
+      - name: Create or update Release
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ steps.run.outputs.run_id }}"
+          if [ -n "$INPUT_NOTES" ]; then
+            NOTES="$INPUT_NOTES"
+          else
+            NOTES="Build #${{ steps.run.outputs.run_id }} (${{ steps.run.outputs.sha }}) の成果物です。${RUN_URL}
+
+          - Windows: zip を展開して toho-seatmap-gui.exe (GUI) / toho-seatmap-cli.exe (CLI) を実行。初回は SmartScreen の警告が出ることがあります(「詳細情報」→「実行」)。
+          - Linux: tar.gz を展開し、chmod +x toho-seatmap-gui toho-seatmap-cli のうえ実行。"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG は既に存在するため、添付ファイルを上書きします"
+            gh release upload "$TAG" assets/* --clobber
+          else
+            FLAGS=()
+            if [ "$PRERELEASE" = "true" ]; then FLAGS+=(--prerelease); fi
+            gh release create "$TAG" assets/* --target "${{ steps.run.outputs.sha }}" --title "$TAG" --notes "$NOTES" "${FLAGS[@]}"
+          fi
+          echo "### Release $TAG を公開しました" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
