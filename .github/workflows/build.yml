@@ -65,7 +65,9 @@ jobs:
           PYTHONUTF8: "1"
         run: |
           ./dist/toho-seatmap-cli.exe tests/sample/sample.har -o smoke
-          if (-not (Test-Path smoke/sample.png)) { throw "PNG not generated" }
+          # 出力名: <入力名>_official.png / <入力名>_official_noObject.svg(既定は公式風・オブジェクトなし)
+          if (-not (Test-Path smoke/sample_official.png)) { throw "PNG not generated" }
+          if (-not (Test-Path smoke/sample_official_noObject.svg)) { throw "SVG not generated" }
           # 版番号がタグどおりに exe へ入っていること
           $ver = ./dist/toho-seatmap-cli.exe --version | Out-String
           if ($ver -notmatch [regex]::Escape($env:VERSION)) { throw "version mismatch: $ver" }
@@ -125,7 +127,9 @@ jobs:
       - name: Smoke test
         run: |
           ./dist/toho-seatmap-cli tests/sample/sample.har -o smoke
-          test -s smoke/sample.png
+          # 出力名: <入力名>_official.png / <入力名>_official_noObject.svg(既定は公式風・オブジェクトなし)
+          test -s smoke/sample_official.png
+          test -s smoke/sample_official_noObject.svg
           ./dist/toho-seatmap-cli --version | grep -F "$VERSION"
           # 同梱アセット(座席gif・画面の背景/CSS)がバイナリの中から読めること
           info="$(./dist/toho-seatmap-cli --self-check)"
