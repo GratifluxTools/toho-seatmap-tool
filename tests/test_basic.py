@@ -21,11 +21,12 @@ class TWriteProgress(unittest.TestCase):
             make_sample(har)
             sm = build_seatmaps([har], log=lambda m: None)[0]
             events = []
-            files = write_outputs(sm, d, {"png", "svg"}, Options(), 1.0, make_fontset(),
+            files = write_outputs(sm, d, {"png", "svg"}, Options(style="plain", svg_objects=True), 1.0, make_fontset(),
                                   progress=lambda p, fin: events.append((os.path.basename(p), fin)))
             self.assertEqual(len(files), 2)
-            self.assertEqual(events, [("toho_umeda_1.png", False), ("toho_umeda_1.png", True),
-                                      ("toho_umeda_1.svg", False), ("toho_umeda_1.svg", True)])
+            self.assertEqual(events, [("toho_umeda_1_plane.png", False), ("toho_umeda_1_plane.png", True),
+                                      ("toho_umeda_1_plane_hasObject.svg", False),
+                                      ("toho_umeda_1_plane_hasObject.svg", True)])
 
     def test_progress_can_cancel_before_next_file(self):
         from toho_seatmap.pipeline import build_seatmaps, make_fontset, write_outputs
@@ -44,9 +45,9 @@ class TWriteProgress(unittest.TestCase):
             make_sample(har)
             sm = build_seatmaps([har], log=lambda m: None)[0]
             with self.assertRaises(Stop):
-                write_outputs(sm, d, {"png", "svg"}, Options(), 1.0, make_fontset(), progress=stop_at_svg)
-            self.assertTrue(os.path.exists(os.path.join(d, "toho_umeda_1.png")))
-            self.assertFalse(os.path.exists(os.path.join(d, "toho_umeda_1.svg")))
+                write_outputs(sm, d, {"png", "svg"}, Options(style="plain"), 1.0, make_fontset(), progress=stop_at_svg)
+            self.assertTrue(os.path.exists(os.path.join(d, "toho_umeda_1_plane.png")))
+            self.assertFalse(os.path.exists(os.path.join(d, "toho_umeda_1_plane_noObject.svg")))
 
 
 class T(unittest.TestCase):

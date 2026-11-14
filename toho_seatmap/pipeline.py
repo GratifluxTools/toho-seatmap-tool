@@ -201,9 +201,8 @@ def build_seatmaps(paths, schedule_paths=(), log=print, fetch_missing=False) -> 
 def make_scene(sm: SeatMap, opts: Options):
     if opts.style == "official":
         return build_official(sm, opts)
-    footer = "TOHOシネマズ公式の座席ページ(HAR)から自動生成 / 空席状態" if opts.lang == "ja" else "Generated from TOHO Cinemas seat page (HAR)"
     tb = trim_box(sm.box)
-    return build_scene(tb, sm.title(opts.lang), sm.subtitle(opts.lang), opts, footer=footer)
+    return build_scene(tb, sm.title(opts.lang), sm.subtitle(opts.lang), opts)
 
 
 def render_image(sm: SeatMap, opts: Options, scale: float, fonts: FontSet):
@@ -247,6 +246,20 @@ def save_webp(img, path: str) -> None:
     img.save(path, "WEBP", lossless=True, quality=100, method=6)
 
 
+def output_name(stem: str, kind: str, opts: Options) -> str:
+    """出力ファイル名。
+    PNG/WebP: <入力名>_plane.png / <入力名>_official.png
+    SVG:      <入力名>_plane_hasObject.svg / <入力名>_plane_noObject.svg (官方は official_*)
+    JSON:     <入力名>.json
+    """
+    if kind == "json":
+        return f"{stem}.json"
+    style = "official" if opts.style == "official" else "plane"
+    if kind == "svg":
+        return f"{stem}_{style}_{'hasObject' if opts.svg_objects else 'noObject'}.svg"
+    return f"{stem}_{style}.{kind}"
+
+
 def write_outputs(sm: SeatMap, outdir: str, formats, opts: Options, scale: float, fonts: FontSet, with_json=False, progress=None) -> list:
     """1画面分のファイルを書き出す。
 
@@ -260,7 +273,7 @@ def write_outputs(sm: SeatMap, outdir: str, formats, opts: Options, scale: float
         plan.append("json")
     img = None  # PNGとWebPは同じ画像から作る(1回だけ描画)
     for kind in plan:
-        path = os.path.join(outdir, f"{sm.stem}.{kind}")
+        path = os.path.join(outdir, output_name(sm.stem, kind, opts))
         if progress is not None:
             progress(path, False)
         if kind in ("png", "webp"):

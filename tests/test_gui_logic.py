@@ -147,8 +147,8 @@ class TGui(unittest.TestCase):
         app.v_out.set(os.path.join(self.tmp.name, "out"))
         app.save_all()
         names = sorted(os.listdir(os.path.join(self.tmp.name, "out")))
-        self.assertIn("toho_umeda_1.png", names)
-        self.assertIn("toho_umeda_1.svg", names)
+        self.assertIn("toho_umeda_1_official.png", names)
+        self.assertTrue(any(n.startswith("toho_umeda_1_official_") and n.endswith(".svg") for n in names))
 
     def test_save_shows_progress_dialog_and_finishes(self):
         gui, app = self._app()
@@ -187,14 +187,14 @@ class TGui(unittest.TestCase):
         app.v_svgobj.set(True)  # SVGにチェックがある(既定)ので有効
         app.save_all()
         out = os.path.join(self.tmp.name, "out2")
-        self.assertIn("toho_umeda_1.webp", os.listdir(out))
-        with open(os.path.join(out, "toho_umeda_1.svg"), encoding="utf-8") as f:
+        self.assertIn("toho_umeda_1_official.webp", os.listdir(out))
+        with open(os.path.join(out, "toho_umeda_1_official_hasObject.svg"), encoding="utf-8") as f:
             self.assertIn('class="seat"', f.read())
         # SVGのチェックを外すと、オプションは効かない(SVG自体が出力されない)
         app.v_svg.set(False)
         app.v_out.set(os.path.join(self.tmp.name, "out3"))
         app.save_all()
-        self.assertNotIn("toho_umeda_1.svg", os.listdir(os.path.join(self.tmp.name, "out3")))
+        self.assertFalse(any(n.endswith(".svg") for n in os.listdir(os.path.join(self.tmp.name, "out3"))))
 
 
 class TSharedResources(unittest.TestCase):

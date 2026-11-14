@@ -30,6 +30,8 @@ toho-seatmap-cli *.zip --schedule toho_umeda_schedule.har --json
 `--blocked`: `seat_0`(選択不可)の扱い。既定は灰色に×。全て通常席として見せたい場合は `normal`。
 
 ### 出力形式
+- ファイル名: `<入力名>_<スタイル>.<拡張子>`。スタイルは `plane`(プレーン) / `official`(公式風)。
+  例: `toho_umeda_4_plane.png`、`toho_umeda_4_official.png`、SVGは `toho_umeda_4_plane_hasObject.svg` / `toho_umeda_4_plane_noObject.svg`(公式風も同様に `official_*`)。SVGの `hasObject` / `noObject` は `--svg-objects` の有無です。JSONは `<入力名>.json`。
 - `-f png,svg,webp`: **WebP は PNG と同じ画像をロスレス(劣化なし)で変換**したものです(ファイルは小さくなります)。
 - SVG は座席を1席ずつ選択できるオブジェクトにできます: CLI `--svg-objects` / GUI「座席を1席ずつオブジェクトにする(SVG)」(SVGを選んだときだけ表示)。
   構造は レイヤー(`layer-seats`) > 行(`row-A`) > 座席(`seat-A-16`、`data-row/number/kind/blocked`、ツールチップ付き)。
