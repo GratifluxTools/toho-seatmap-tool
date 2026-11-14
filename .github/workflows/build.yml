@@ -1,0 +1,173 @@
+name: Build
+
+# 次のどちらかで実行します。
+#  1. GitHub Release を公開(published)したとき: タグ名から版番号を決めてビルドし、
+#     そのRelease に成果物を自動で添付します。
+#       例: タグ v0.1.0 → 版番号 0.1.0 → toho-seatmap-v0.1.0-windows-x64.zip など
+#  2. 手動実行(Actions > Build > Run workflow): テスト用のビルドです。
+#     版番号を入力して、成果物は Artifacts にだけ出します(Release には付けません)。
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: ビルド対象
+        type: choice
+        options: [windows, linux, both]
+        default: both
+      version:
+        description: 版番号 (例 0.1.0)。テスト用なので空欄なら 0.0.0-dev
+        type: string
+        default: 0.0.0-dev
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    if: ${{ github.event_name == 'release' || inputs.target == 'windows' || inputs.target == 'both' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Determine version
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT" = "release" ]; then RAW="$RELEASE_TAG"; else RAW="${INPUT_VERSION:-0.0.0-dev}"; fi
+          python tools/set_version.py "$RAW"
+          echo "VERSION=${RAW#v}" >> "$GITHUB_ENV"
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Build GUI (exe)
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name toho-seatmap-gui --hidden-import PIL._tkinter_finder
+          --icon assets/icon/icon.ico
+          --add-data "toho_seatmap/assets;toho_seatmap/assets" run_gui.py
+      - name: Build CLI (exe)
+        run: >
+          pyinstaller --noconfirm --onefile --console --name toho-seatmap-cli
+          --icon assets/icon/icon.ico
+          --add-data "toho_seatmap/assets;toho_seatmap/assets" run_cli.py
+      - name: Smoke test
+        shell: pwsh
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          ./dist/toho-seatmap-cli.exe tests/sample/sample.har -o smoke
+          if (-not (Test-Path smoke/sample.png)) { throw "PNG not generated" }
+          # 版番号がタグどおりに exe へ入っていること
+          $ver = ./dist/toho-seatmap-cli.exe --version | Out-String
+          if ($ver -notmatch [regex]::Escape($env:VERSION)) { throw "version mismatch: $ver" }
+          # 同梱アセット(座席gif・画面の背景/CSS)がexeの中から読めること
+          $info = ./dist/toho-seatmap-cli.exe --self-check | Out-String
+          Write-Host $info
+          if ($info -notmatch 'embedded_seat_gifs=(1[0-9]|[2-9][0-9])') { throw "seat gifs not available" }
+          if ((Test-Path toho_seatmap/assets/screens) -and ($info -notmatch 'bundled_screen_files=[1-9]')) { throw "bundled screen assets missing from exe" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toho-seatmap-windows-x64
+          path: |
+            dist/toho-seatmap-gui.exe
+            dist/toho-seatmap-cli.exe
+
+  linux:
+    if: ${{ github.event_name == 'release' || inputs.target == 'linux' || inputs.target == 'both' }}
+    # 古めのglibcでビルドすると新旧ディストリで動かしやすい
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Determine version
+        env:
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT" = "release" ]; then RAW="$RELEASE_TAG"; else RAW="${INPUT_VERSION:-0.0.0-dev}"; fi
+          python tools/set_version.py "$RAW"
+          echo "VERSION=${RAW#v}" >> "$GITHUB_ENV"
+      - name: System packages (tkinter, Japanese font)
+        run: sudo apt-get update && sudo apt-get install -y python3-tk tk fonts-noto-cjk
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - name: Bundle Japanese font (OFL)
+        # 利用者のLinuxに日本語フォントが無くてもPNGが日本語になるよう同梱する
+        run: |
+          mkdir -p toho_seatmap/fonts
+          cp "$(fc-list :lang=ja file | grep -i 'NotoSansCJK.*Regular' | head -n1 | cut -d: -f1)" toho_seatmap/fonts/ || echo "font bundle skipped"
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Build GUI
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name toho-seatmap-gui --hidden-import PIL._tkinter_finder
+          --add-data "toho_seatmap/assets:toho_seatmap/assets"
+          --add-data "toho_seatmap/fonts:toho_seatmap/fonts" run_gui.py
+      - name: Build CLI
+        run: >
+          pyinstaller --noconfirm --onefile --console
+          --name toho-seatmap-cli
+          --add-data "toho_seatmap/assets:toho_seatmap/assets"
+          --add-data "toho_seatmap/fonts:toho_seatmap/fonts" run_cli.py
+      - name: Smoke test
+        run: |
+          ./dist/toho-seatmap-cli tests/sample/sample.har -o smoke
+          test -s smoke/sample.png
+          ./dist/toho-seatmap-cli --version | grep -F "$VERSION"
+          # 同梱アセット(座席gif・画面の背景/CSS)がバイナリの中から読めること
+          info="$(./dist/toho-seatmap-cli --self-check)"
+          echo "$info"
+          echo "$info" | grep -E 'embedded_seat_gifs=(1[0-9]|[2-9][0-9])'
+          if [ -d toho_seatmap/assets/screens ]; then echo "$info" | grep -E 'bundled_screen_files=[1-9]'; fi
+      - name: Package (keep executable bit)
+        run: tar -C dist -czf toho-seatmap-linux-x64.tar.gz toho-seatmap-gui toho-seatmap-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toho-seatmap-linux-x64
+          path: toho-seatmap-linux-x64.tar.gz
+
+  # Release が公開されたときだけ、成果物を Release に添付する(ビルドはやり直さない)
+  publish:
+    needs: [windows, linux]
+    if: ${{ github.event_name == 'release' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # Release へのファイル添付
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: toho-seatmap-windows-x64
+          path: artifacts/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: toho-seatmap-linux-x64
+          path: artifacts/linux
+      - name: Prepare release assets
+        run: |
+          mkdir -p assets
+          (cd artifacts/windows && zip -j "$GITHUB_WORKSPACE/assets/toho-seatmap-${TAG}-windows-x64.zip" *.exe)
+          cp artifacts/linux/toho-seatmap-linux-x64.tar.gz "assets/toho-seatmap-${TAG}-linux-x64.tar.gz"
+          ls -lh assets
+      - name: Attach to Release
+        run: gh release upload "$TAG" assets/* --clobber
+      - name: Summary
+        run: |
+          echo "### Release $TAG に成果物を添付しました" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
